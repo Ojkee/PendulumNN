@@ -26,6 +26,20 @@ class Stats:
     cart_x: float
     cart_velocity: float
 
+    def norm_cart_x(self, max_x: float) -> None:
+        self.cart_x /= max_x
+
+    def as_flat(self) -> np.ndarray:
+        return np.concatenate(
+            [
+                self.sin_angles,
+                self.cos_angles,
+                self.velocities,
+                [self.cart_x, self.cart_velocity],
+            ],
+            dtype=float_t,
+        )
+
 
 class PendulumSimulation:
     LINE_WIDTH = 2
@@ -62,6 +76,7 @@ class PendulumSimulation:
         self._lens = np.ones(self._num_nodes, dtype=float_t)
         self._masses = np.ones(self._num_nodes, dtype=float_t) * self.NODE_MASS
         self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        self._angles[-1] += np.random.uniform(-0.1, 0.1)
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
 
         self._update_forces = (

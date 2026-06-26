@@ -3,6 +3,7 @@ from __future__ import annotations
 import pygame
 
 from PendulumNN.models import Colors
+from PendulumNN.neural_net import NeuralNetwork
 from PendulumNN.pendulum import PendulumSimulation, UpdateStrategy, Stats
 
 
@@ -23,6 +24,10 @@ class Window:
             damping=0.5,
             update_strategy=UpdateStrategy.EULER,
         )
+        self.model = NeuralNetwork(
+            input_dim=len(self._pendulum.stats.as_flat()),
+            hidden_layers=2,
+        ).to(NeuralNetwork.DEVICE)
 
     @property
     def screen(self) -> pygame.Surface:
@@ -50,7 +55,6 @@ class Window:
             self._check_event()
             self._update()
             self._draw()
-            stats: Stats = self._pendulum.stats
 
     def _check_event(self) -> None:
         for event in pygame.event.get():
@@ -68,5 +72,28 @@ class Window:
 
     def _draw(self) -> None:
         self.screen.fill(Colors.GREY)
+        self._draw_center_dot_line()
         self._pendulum.draw(self.screen)
         pygame.display.update()
+
+    def _draw_center_dot_line(self) -> None:
+        for h in range(100, self._height // 2 + 100, 10):
+            pygame.draw.circle(
+                self.screen,
+                (*Colors.BEIGE, 24),
+                (self._width // 2, h),
+                radius=1,
+                width=1,
+            )
+        pygame.draw.line(
+            self.screen,
+            (*Colors.BEIGE, 24),
+            (0, self._height // 2),
+            (self._width, self._height // 2),
+            width=1,
+        )
+
+    def nn_control(self) -> None:
+        stats: Stats = self._pendulum.stats
+        stats.norm_cart_x(self._width / 2)
+        prediction = self.model.forward(stats.as_flat())
