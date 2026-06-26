@@ -90,6 +90,8 @@ class PendulumSimulation:
             UpdateStrategy.RK4: self._rk4_strategy,
         }
 
+        self.reset()
+
     def draw(self, screen: pygame.Surface) -> None:
         cart_x = int(self._cart_x * self._pendulum_scale) + self._offset_x
         origin = [(cart_x, self._offset_y)]
@@ -268,3 +270,12 @@ class PendulumSimulation:
             cart_x=self._cart_x,
             cart_velocity=self._cart_velocity / PendulumSimulation.MAX_CAR_VELOCITY,
         )
+
+    def reset(self, angle_noise: float = 0.05) -> None:
+        rng = np.random.default_rng()
+        self._cart_x = 0
+        self._cart_velocity = float_t(0.0)
+        self._cart_acceleration = float_t(0.0)
+        self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        self._angles += rng.uniform(-angle_noise, angle_noise, size=self._num_nodes)
+        self._velocities = np.zeros(self._num_nodes, dtype=float_t)
