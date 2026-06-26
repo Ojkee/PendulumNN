@@ -3,7 +3,7 @@ from __future__ import annotations
 import pygame
 
 from PendulumNN.models import Colors
-from PendulumNN.pendulum import PendulumSimulation
+from PendulumNN.pendulum import PendulumSimulation, UpdateStrategy, Stats
 
 
 class Window:
@@ -21,6 +21,7 @@ class Window:
             nodes=3,
             pendulum_length=50,
             damping=0.5,
+            update_strategy=UpdateStrategy.EULER,
         )
 
     @property
@@ -49,6 +50,7 @@ class Window:
             self._check_event()
             self._update()
             self._draw()
+            stats: Stats = self._pendulum.stats
 
     def _check_event(self) -> None:
         for event in pygame.event.get():

@@ -1,6 +1,7 @@
 from enum import Enum, auto
 from itertools import pairwise
 from typing import Callable
+from dataclasses import dataclass
 
 import pygame
 import numpy as np
@@ -17,12 +18,23 @@ class UpdateStrategy(Enum):
     RK4 = auto()
 
 
+@dataclass
+class Stats:
+    sin_angles: np.ndarray
+    cos_angles: np.ndarray
+    velocities: np.ndarray
+    cart_x: float
+    cart_velocity: float
+
+
 class PendulumSimulation:
     LINE_WIDTH = 2
     CIRCLE_RADIUS = 4
-    NODE_MASS = 2
+    NODE_MASS = float_t(2.0)
+    MAX_VELOCITIES = float_t(25.0)  # tested empirically
 
-    CART_ACCELERATION = float_t(10)
+    CART_ACCELERATION = float_t(10.0)
+    MAX_CAR_VELOCITY = float_t(16.0)  # tested empirically
     GRAVITY = float_t(9.81)
 
     def __init__(
@@ -33,6 +45,7 @@ class PendulumSimulation:
         pendulum_length: int = 20,
         damping: float = 0.0,
         dt: float = 0.001,
+        update_strategy: UpdateStrategy = UpdateStrategy.EULER,
     ) -> None:
         self._offset_x = x
         self._offset_y = y
@@ -48,7 +61,7 @@ class PendulumSimulation:
 
         self._lens = np.ones(self._num_nodes, dtype=float_t)
         self._masses = np.ones(self._num_nodes, dtype=float_t) * self.NODE_MASS
-        self._angles = np.ones(self._num_nodes, dtype=float_t) * 0
+        self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
 
         self._update_forces = (
@@ -56,6 +69,7 @@ class PendulumSimulation:
             self._cart_velocity_influence,
         )
 
+        self._update_strategy_type = update_strategy
         self._update_strategies: dict[UpdateStrategy, strategy_fn] = {
             UpdateStrategy.EULER: self._euler_strategy,
             UpdateStrategy.RK4: self._rk4_strategy,
@@ -90,8 +104,8 @@ class PendulumSimulation:
         screen.blit(text_surface, pos)
 
     def update(self) -> None:
-        update_strategy = self._update_strategies[UpdateStrategy.EULER]
-        update_strategy()
+        self.update_strategy()
+        self._cart_acceleration = float_t(0)
 
     def _euler_strategy(self) -> None:
         self._velocities += self.alpha * self._dt
@@ -100,10 +114,56 @@ class PendulumSimulation:
         self._cart_velocity += self._cart_acceleration * self._dt
         self._cart_velocity *= 1.0 - self._damping_factor * self._dt
         self._cart_x += self._cart_velocity * self._dt
-        self._cart_acceleration = float_t(0)
 
     def _rk4_strategy(self) -> None:
-        pass
+        a, v = self._angles.copy(), self._velocities.copy()
+        x, cv = self._cart_x, self._cart_velocity
+        ca = self._cart_acceleration
+
+        dt = self._dt
+
+        dv1, da1, dx1, dcv1 = self._derivatives(a, v, x, cv, ca)
+        dv2, da2, dx2, dcv2 = self._derivatives(
+            a + dt / 2 * da1, v + dt / 2 * dv1, x + dt / 2 * dx1, cv + dt / 2 * dcv1, ca
+        )
+        dv3, da3, dx3, dcv3 = self._derivatives(
+            a + dt / 2 * da2, v + dt / 2 * dv2, x + dt / 2 * dx2, cv + dt / 2 * dcv2, ca
+        )
+        dv4, da4, dx4, dcv4 = self._derivatives(
+            a + dt * da3, v + dt * dv3, x + dt * dx3, cv + dt * dcv3, ca
+        )
+
+        self._angles += dt / 6 * (da1 + 2 * da2 + 2 * da3 + da4)
+        self._velocities += dt / 6 * (dv1 + 2 * dv2 + 2 * dv3 + dv4)
+        self._cart_x += dt / 6 * (dx1 + 2 * dx2 + 2 * dx3 + dx4)
+        self._cart_velocity += dt / 6 * (dcv1 + 2 * dcv2 + 2 * dcv3 + dcv4)
+
+    def _derivatives(self, angles, velocities, cart_x, cart_vel, cart_acc):
+        old_a, old_v, old_x, old_cv = (
+            self._angles,
+            self._velocities,
+            self._cart_x,
+            self._cart_velocity,
+        )
+        self._angles, self._velocities, self._cart_x, self._cart_velocity = (
+            angles,
+            velocities,
+            cart_x,
+            cart_vel,
+        )
+        self._cart_acceleration = cart_acc
+
+        alpha = self.alpha  # ← tutaj, przed przywróceniem
+        friction = self._damping_factor * cart_vel
+
+        self._angles, self._velocities, self._cart_x, self._cart_velocity = (
+            old_a,
+            old_v,
+            old_x,
+            old_cv,
+        )
+
+        return velocities, alpha, cart_vel, cart_acc - friction
 
     def _xs(self) -> np.ndarray:
         return np.cumsum(
@@ -123,7 +183,6 @@ class PendulumSimulation:
 
     @property
     def M(self) -> np.ndarray:
-        # TODO: M is symmetric, therefore it can be optimized
         _M = np.zeros(shape=(self._num_nodes, self._num_nodes))
         for i in range(self._num_nodes):
             for j in range(self._num_nodes):
@@ -161,6 +220,10 @@ class PendulumSimulation:
 
         return f
 
+    @property
+    def update_strategy(self) -> strategy_fn:
+        return self._update_strategies[self._update_strategy_type]
+
     def _damping(self, i: int) -> float_t:
         return self._damping_factor * self._velocities[i]
 
@@ -180,3 +243,13 @@ class PendulumSimulation:
 
     def _accelerate_horizontal(self, da: float) -> None:
         self._cart_acceleration = da
+
+    @property
+    def stats(self) -> Stats:
+        return Stats(
+            sin_angles=np.sin(self._angles),
+            cos_angles=np.cos(self._angles),
+            velocities=self._velocities / PendulumSimulation.MAX_VELOCITIES,
+            cart_x=self._cart_x,
+            cart_velocity=self._cart_velocity / PendulumSimulation.MAX_CAR_VELOCITY,
+        )
