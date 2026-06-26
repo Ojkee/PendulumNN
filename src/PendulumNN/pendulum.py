@@ -1,3 +1,4 @@
+from enum import Enum, auto
 from itertools import pairwise
 from typing import Callable
 
@@ -8,6 +9,12 @@ from PendulumNN.models import Colors
 
 pos_t = tuple[int, int]
 float_t = np.float64
+strategy_fn = Callable[[], None]
+
+
+class UpdateStrategy(Enum):
+    EULER = auto()
+    RK4 = auto()
 
 
 class PendulumSimulation:
@@ -15,7 +22,8 @@ class PendulumSimulation:
     CIRCLE_RADIUS = 4
     NODE_MASS = 2
 
-    CART_ACCELERATION = 10
+    CART_ACCELERATION = float_t(10)
+    GRAVITY = float_t(9.81)
 
     def __init__(
         self,
@@ -30,7 +38,6 @@ class PendulumSimulation:
         self._offset_y = y
         self._num_nodes = nodes
 
-        self._gravity = float_t(9.81)
         self._pendulum_scale = pendulum_length
         self._damping_factor = damping
         self._dt = dt
@@ -43,6 +50,16 @@ class PendulumSimulation:
         self._masses = np.ones(self._num_nodes, dtype=float_t) * self.NODE_MASS
         self._angles = np.ones(self._num_nodes, dtype=float_t) * 0
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
+
+        self._update_forces = (
+            self._damping,
+            self._cart_velocity_influence,
+        )
+
+        self._update_strategies: dict[UpdateStrategy, strategy_fn] = {
+            UpdateStrategy.EULER: self._euler_strategy,
+            UpdateStrategy.RK4: self._rk4_strategy,
+        }
 
     def draw(self, screen: pygame.Surface) -> None:
         cart_x = int(self._cart_x * self._pendulum_scale) + self._offset_x
@@ -73,19 +90,20 @@ class PendulumSimulation:
         screen.blit(text_surface, pos)
 
     def update(self) -> None:
-        f = self._f(self._damping, self._cart_velocity_influence)
-        alpha = np.linalg.solve(self.M, f)
+        update_strategy = self._update_strategies[UpdateStrategy.EULER]
+        update_strategy()
 
-        self._velocities += alpha * self._dt
+    def _euler_strategy(self) -> None:
+        self._velocities += self.alpha * self._dt
         self._angles += self._velocities * self._dt
 
-        self._update_cart()
-
-    def _update_cart(self) -> None:
         self._cart_velocity += self._cart_acceleration * self._dt
         self._cart_velocity *= 1.0 - self._damping_factor * self._dt
         self._cart_x += self._cart_velocity * self._dt
         self._cart_acceleration = float_t(0)
+
+    def _rk4_strategy(self) -> None:
+        pass
 
     def _xs(self) -> np.ndarray:
         return np.cumsum(
@@ -98,6 +116,10 @@ class PendulumSimulation:
             -self._pendulum_scale * self._lens * np.cos(self._angles),
             dtype=np.int16,
         )
+
+    @property
+    def alpha(self) -> np.ndarray:
+        return np.linalg.solve(self.M, self.f)
 
     @property
     def M(self) -> np.ndarray:
@@ -114,9 +136,10 @@ class PendulumSimulation:
                 _M[i][j] = lhs * rhs
         return _M
 
-    def _f(self, *forces: Callable[[int], float_t]) -> np.ndarray:
+    @property
+    def f(self) -> np.ndarray:
         f = np.zeros(self._num_nodes)
-        grav = self._gravity * self._lens * np.sin(self._angles)
+        grav = PendulumSimulation.GRAVITY * self._lens * np.sin(self._angles)
         for i in range(self._num_nodes):
             lhs_masses = np.sum(self._masses[i:])
             lhs = lhs_masses * grav[i]
@@ -133,7 +156,7 @@ class PendulumSimulation:
                 rhs_array[j] = masses * sin_diff
             rhs = np.sum(rhs_array)
             f[i] = -lhs - rhs
-            for force in forces:
+            for force in self._update_forces:
                 f[i] -= force(i)
 
         return f
