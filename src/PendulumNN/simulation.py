@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pygame
 import numpy as np
 
-from PendulumNN.common import Action, Colors
+from PendulumNN.common import Action, Colors, Context
 
 pos_t = tuple[int, int]
 float_t = np.float64
@@ -53,16 +53,12 @@ class PendulumSimulation:
 
     def __init__(
         self,
-        x: int,
-        y: int,
         nodes: int,
         pendulum_length: int = 20,
         damping: float = 0.0,
         dt: float = 0.001,
         update_strategy: UpdateStrategy = UpdateStrategy.EULER,
     ) -> None:
-        self._offset_x = x
-        self._offset_y = y
         self._num_nodes = nodes
 
         self._pendulum_scale = pendulum_length
@@ -92,13 +88,33 @@ class PendulumSimulation:
 
         self.reset()
 
-    def draw(self, surface: pygame.Surface) -> None:
-        cart_x = int(self._cart_x * self._pendulum_scale) + self._offset_x
-        origin = [(cart_x, self._offset_y)]
-        nodes = list(zip(self._xs() + self._offset_x, -self._ys() + self._offset_y))
+    def draw(self, ctx: Context) -> None:
+        offset_x = ctx.width // 2
+        offset_y = ctx.height // 2
+        cart_x = int(self._cart_x * self._pendulum_scale) + offset_x
+        origin = [(cart_x, offset_y)]
+        nodes = list(zip(self._xs() + offset_x, -self._ys() + offset_y))
         for lhs, rhs in pairwise(origin + nodes):
-            self._line(surface, lhs, rhs)
-            self._point(surface, rhs)
+            self._line(ctx.surface, lhs, rhs)
+            self._point(ctx.surface, rhs)
+        self._draw_axis(ctx)
+
+    def _draw_axis(self, ctx: Context) -> None:
+        for h in range(100, ctx.height // 2 + 100, 10):
+            pygame.draw.circle(
+                ctx.surface,
+                Colors.BEIGE,
+                (ctx.width // 2, h),
+                radius=1,
+                width=1,
+            )
+        pygame.draw.line(
+            ctx.surface,
+            Colors.BEIGE,
+            (0, ctx.height // 2),
+            (ctx.width, ctx.height // 2),
+            width=1,
+        )
 
     @classmethod
     def _line(cls, surface: pygame.Surface, lhs: pos_t, rhs: pos_t) -> None:
