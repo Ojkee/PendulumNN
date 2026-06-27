@@ -297,7 +297,9 @@ class PendulumSimulation(Simulation):
     def output_dim(self) -> int:
         return 3  # left, stay, right
 
-    def fitness(self, stats: Stats) -> np.float64:
+    def fitness(self, ctx: Context) -> np.float64:
+        stats = self.stats
+        stats.norm_cart_x(ctx.width // 2)
         angle_loss = np.sum(1.0 + stats.cos_angles)
         far_from_center = np.abs(stats.cart_x)
         velocity_penalty = np.sum(np.abs(stats.velocities))
