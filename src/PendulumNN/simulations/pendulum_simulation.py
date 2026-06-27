@@ -7,7 +7,7 @@ from functools import cache
 import pygame
 import numpy as np
 
-from PendulumNN.common import Action, Colors, Context
+from PendulumNN.common import Colors, Context
 from PendulumNN.simulations.simulation import Simulation
 
 pos_t = tuple[int, int]
@@ -21,7 +21,7 @@ class UpdateStrategy(Enum):
 
 
 @dataclass
-class Stats:
+class _PendulumState:
     sin_angles: np.ndarray
     cos_angles: np.ndarray
     velocities: np.ndarray
@@ -270,16 +270,9 @@ class PendulumSimulation(Simulation):
             * self._cart_acceleration
         )
 
-    def apply_action(self, action: Action) -> None:
-        match action:
-            case Action.LEFT:
-                self._cart_acceleration = -PendulumSimulation.CART_ACCELERATION
-            case Action.RIGHT:
-                self._cart_acceleration = PendulumSimulation.CART_ACCELERATION
-
     @property
-    def stats(self) -> Stats:
-        return Stats(
+    def state(self) -> _PendulumState:
+        return _PendulumState(
             sin_angles=np.sin(self._angles),
             cos_angles=np.cos(self._angles),
             velocities=self._velocities / PendulumSimulation.MAX_VELOCITIES,
@@ -290,32 +283,40 @@ class PendulumSimulation(Simulation):
     @property
     @cache
     def input_dim(self) -> int:
-        return len(self.stats.as_flat())
+        return len(self.state.as_flat())
 
     @property
     @cache
     def output_dim(self) -> int:
         return 3  # left, stay, right
 
-    def fitness(self, ctx: Context) -> np.float64:
-        stats = self.stats
-        stats.norm_cart_x(ctx.width // 2)
-        angle_loss = np.sum(1.0 + stats.cos_angles)
-        far_from_center = np.abs(stats.cart_x)
-        velocity_penalty = np.sum(np.abs(stats.velocities))
-        cart_velocity_penalty = np.abs(stats.cart_velocity)
-        return (
-            angle_loss
-            + 0.1 * far_from_center
-            + 0.05 * velocity_penalty
-            + 0.05 * cart_velocity_penalty
-        )
+    @property
+    def input_state_vector(self) -> np.ndarray:
+        return self.state.as_flat()
 
-    def reset(self, angle_noise: float = 0.05) -> None:
+    def handle_output_vector(self, y: np.ndarray) -> None:
+        match int(np.argmax(y)):
+            case 0:  # ACCELERATE LEFT
+                self._cart_acceleration = -PendulumSimulation.CART_ACCELERATION
+            case 1:  # STAY
+                pass
+            case 2:  # ACCELERATE RIGHT
+                self._cart_acceleration = PendulumSimulation.CART_ACCELERATION
+
+    def fitness(self, ctx: Context) -> np.float64:
+        state = self.state
+        state.norm_cart_x(ctx.width // 2)
+        angle_loss = np.sum(1.0 + state.cos_angles)
+        far_from_center = np.abs(state.cart_x)
+        velocity_penalty = np.sum(np.abs(state.velocities))
+        return angle_loss + 0.1 * far_from_center + 0.05 * velocity_penalty
+
+    def reset(self) -> None:
         rng = np.random.default_rng()
         self._cart_x = 0
         self._cart_velocity = float_t(0.0)
         self._cart_acceleration = float_t(0.0)
         self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        angle_noise: float = 0.05
         self._angles += rng.uniform(-angle_noise, angle_noise, size=self._num_nodes)
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
