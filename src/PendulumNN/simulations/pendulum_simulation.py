@@ -2,6 +2,7 @@ from enum import Enum, auto
 from itertools import pairwise
 from typing import Callable
 from dataclasses import dataclass
+from functools import cache
 
 import pygame
 import numpy as np
@@ -284,6 +285,28 @@ class PendulumSimulation(Simulation):
             velocities=self._velocities / PendulumSimulation.MAX_VELOCITIES,
             cart_x=self._cart_x,
             cart_velocity=self._cart_velocity / PendulumSimulation.MAX_CAR_VELOCITY,
+        )
+
+    @property
+    @cache
+    def input_dim(self) -> int:
+        return len(self.stats.as_flat())
+
+    @property
+    @cache
+    def output_dim(self) -> int:
+        return 3  # left, stay, right
+
+    def fitness(self, stats: Stats) -> np.float64:
+        angle_loss = np.sum(1.0 + stats.cos_angles)
+        far_from_center = np.abs(stats.cart_x)
+        velocity_penalty = np.sum(np.abs(stats.velocities))
+        cart_velocity_penalty = np.abs(stats.cart_velocity)
+        return (
+            angle_loss
+            + 0.1 * far_from_center
+            + 0.05 * velocity_penalty
+            + 0.05 * cart_velocity_penalty
         )
 
     def reset(self, angle_noise: float = 0.05) -> None:

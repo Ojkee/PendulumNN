@@ -37,6 +37,7 @@ class Window:
             self._draw()
 
     def _check_event(self) -> None:
+        self._current_screen.handle_event()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self._running = False
