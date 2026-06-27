@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pygame
 import numpy as np
 
-from PendulumNN.models import Colors
+from PendulumNN.models import Action, Colors
 
 pos_t = tuple[int, int]
 float_t = np.float64
@@ -252,14 +252,12 @@ class PendulumSimulation:
             * self._cart_acceleration
         )
 
-    def accelerate_left(self) -> None:
-        self._accelerate_horizontal(-PendulumSimulation.CART_ACCELERATION)
-
-    def accelerate_right(self) -> None:
-        self._accelerate_horizontal(PendulumSimulation.CART_ACCELERATION)
-
-    def _accelerate_horizontal(self, da: float) -> None:
-        self._cart_acceleration = da
+    def apply_action(self, action: Action) -> None:
+        match action:
+            case Action.LEFT:
+                self._cart_acceleration = -PendulumSimulation.CART_ACCELERATION
+            case Action.RIGHT:
+                self._cart_acceleration = PendulumSimulation.CART_ACCELERATION
 
     @property
     def stats(self) -> Stats:
