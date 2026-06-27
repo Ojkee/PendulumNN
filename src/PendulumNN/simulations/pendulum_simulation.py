@@ -7,6 +7,7 @@ import pygame
 import numpy as np
 
 from PendulumNN.common import Action, Colors, Context
+from PendulumNN.simulations.simulation import Simulation
 
 pos_t = tuple[int, int]
 float_t = np.float64
@@ -41,7 +42,7 @@ class Stats:
         )
 
 
-class PendulumSimulation:
+class PendulumSimulation(Simulation):
     LINE_WIDTH = 2
     CIRCLE_RADIUS = 4
     NODE_MASS = float_t(2.0)

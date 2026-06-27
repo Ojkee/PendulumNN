@@ -20,7 +20,7 @@ class Action(Enum):
 class Context:
     width: int
     height: int
-    _surface: pygame.Surface | None
+    _surface: pygame.Surface | None = None
 
     @property
     def surface(self) -> pygame.Surface:
