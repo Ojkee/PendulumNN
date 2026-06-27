@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pygame
 import numpy as np
 
-from PendulumNN.models import Action, Colors
+from PendulumNN.common import Action, Colors
 
 pos_t = tuple[int, int]
 float_t = np.float64
@@ -92,22 +92,22 @@ class PendulumSimulation:
 
         self.reset()
 
-    def draw(self, screen: pygame.Surface) -> None:
+    def draw(self, surface: pygame.Surface) -> None:
         cart_x = int(self._cart_x * self._pendulum_scale) + self._offset_x
         origin = [(cart_x, self._offset_y)]
         nodes = list(zip(self._xs() + self._offset_x, -self._ys() + self._offset_y))
         for lhs, rhs in pairwise(origin + nodes):
-            self._line(screen, lhs, rhs)
-            self._point(screen, rhs)
+            self._line(surface, lhs, rhs)
+            self._point(surface, rhs)
 
     @classmethod
-    def _line(cls, screen: pygame.Surface, lhs: pos_t, rhs: pos_t) -> None:
-        pygame.draw.line(screen, Colors.BEIGE, lhs, rhs, cls.LINE_WIDTH)
+    def _line(cls, surface: pygame.Surface, lhs: pos_t, rhs: pos_t) -> None:
+        pygame.draw.line(surface, Colors.BEIGE, lhs, rhs, cls.LINE_WIDTH)
 
     @classmethod
-    def _point(cls, screen: pygame.Surface, center: pos_t) -> None:
+    def _point(cls, surface: pygame.Surface, center: pos_t) -> None:
         pygame.draw.circle(
-            screen,
+            surface,
             Colors.BEIGE,
             center,
             cls.CIRCLE_RADIUS,
@@ -115,10 +115,10 @@ class PendulumSimulation:
         )
 
     @classmethod
-    def _text(cls, screen: pygame.Surface, text: str, pos: pos_t) -> None:
+    def _text(cls, surface: pygame.Surface, text: str, pos: pos_t) -> None:
         font = pygame.font.SysFont("Comic Sans MS", 18)
         text_surface = font.render(text, False, Colors.BEIGE)
-        screen.blit(text_surface, pos)
+        surface.blit(text_surface, pos)
 
     def update(self) -> None:
         self.update_strategy()

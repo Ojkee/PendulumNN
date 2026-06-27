@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pygame
 
-from PendulumNN.models import Colors
-from PendulumNN.neural_net import NeuralNetwork
-from PendulumNN.pendulum import PendulumSimulation, UpdateStrategy
+from PendulumNN.common import Colors
+from PendulumNN.ai.neural_net import NeuralNetwork
+from PendulumNN.simulation import PendulumSimulation, UpdateStrategy
 
 
 class Window:
@@ -14,13 +14,13 @@ class Window:
         self._width = width
         self._height = height
         self._running: bool = True
-        self._screen: pygame.Surface | None = None
+        self._surface: pygame.Surface | None = None
         self._pendulum = PendulumSimulation(
             self._width // 2,
             self._height // 2,
             nodes=1,
             pendulum_length=50,
-            damping=0.5,
+            damping=0.25,
             update_strategy=UpdateStrategy.EULER,
         )
         self.model = NeuralNetwork(
@@ -29,13 +29,13 @@ class Window:
 
     @property
     def surface(self) -> pygame.Surface:
-        if self._screen is None:
+        if self._surface is None:
             raise ValueError("self._screen should be assigned")
-        return self._screen
+        return self._surface
 
     @surface.setter
-    def screen(self, value: pygame.Surface) -> None:
-        self._screen = value
+    def surface(self, value: pygame.Surface) -> None:
+        self._surface = value
 
     def __enter__(self) -> Window:
         pygame.init()
@@ -61,12 +61,12 @@ class Window:
 
     def _update(self) -> None:
         self._pendulum.update()
+        pygame.display.update()
 
     def _draw(self) -> None:
         self.screen.fill(Colors.GREY)
         self._draw_axis()
         self._pendulum.draw(self.screen)
-        pygame.display.update()
 
     def _draw_axis(self) -> None:
         for h in range(100, self._height // 2 + 100, 10):

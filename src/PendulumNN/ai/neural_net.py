@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from torch import nn
 
-from PendulumNN.pendulum import Stats
+from PendulumNN.simulation import Stats
 
 
 class NeuralNetwork(nn.Module):
