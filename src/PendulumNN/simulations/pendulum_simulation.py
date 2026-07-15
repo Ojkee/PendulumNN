@@ -253,13 +253,11 @@ class PendulumSimulation(Simulation):
                     PendulumSimulation.CART_ACCELERATION, dtype=float_t
                 )
 
-    def fitness(self, ctx: Context) -> torch.Tensor:
-        state = self.state
-        state.norm_cart_x(ctx.width // 2)
-        angle_loss = torch.sum(1.0 + state.cos_angles)
-        far_from_center = torch.abs(state.cart_x)
-        velocity_penalty = torch.sum(torch.abs(state.velocities))
-        return angle_loss + 0.1 * far_from_center + 0.05 * velocity_penalty
+    def reward(self, ctx: Context) -> torch.Tensor:
+        return -self._fitness(ctx)
+
+    def loss(self) -> torch.Tensor:
+        raise NotImplementedError()
 
     @torch.no_grad()
     def reset(self) -> None:
@@ -274,3 +272,11 @@ class PendulumSimulation(Simulation):
         ) * angle_noise
 
         self._velocities = torch.zeros(self._num_nodes, dtype=float_t)
+
+    def _fitness(self, ctx: Context) -> torch.Tensor:
+        state = self.state
+        state.norm_cart_x(ctx.width // 2)
+        angle_loss = torch.sum(1.0 + state.cos_angles)
+        far_from_center = torch.abs(state.cart_x)
+        velocity_penalty = torch.sum(torch.abs(state.velocities))
+        return angle_loss + 0.1 * far_from_center + 0.05 * velocity_penalty

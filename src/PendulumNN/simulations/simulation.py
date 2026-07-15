@@ -25,10 +25,13 @@ class Simulation(ABC):
     def input_state_vector(self) -> torch.Tensor: ...
 
     @abstractmethod
-    def handle_output_vector(self, y: torch.Tensor) -> torch.Tensor:
-        r"""
-        Simulation handles output and returns loss
-        """
+    def handle_output_vector(self, y: torch.Tensor) -> None: ...
+
+    @abstractmethod
+    def reward(self) -> torch.Tensor: ...
+
+    @abstractmethod
+    def loss(self) -> torch.Tensor: ...
 
     @abstractmethod
     def reset(self) -> None: ...

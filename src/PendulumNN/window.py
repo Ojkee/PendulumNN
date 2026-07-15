@@ -14,11 +14,12 @@ class Window:
         self._running: bool = True
         self._current_screen: Screen = SimulationScreen(
             simulation=PendulumSimulation(
-                nodes=2,
+                nodes=1,
                 pendulum_length=50,
                 damping=0.5,
             ),
             model=DummyModel(),
+            ctx=self.ctx,
         )
 
     def __enter__(self) -> Window:
