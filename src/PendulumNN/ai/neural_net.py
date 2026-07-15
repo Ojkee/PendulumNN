@@ -3,13 +3,19 @@ from itertools import pairwise
 import torch
 
 from torch import nn
+import torch.nn.functional as F
 
 
 class NeuralNetwork(nn.Module):
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {DEVICE} device")
 
-    def __init__(self, input_dim: int, hidden_dims: list[int], output_dim: int) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dims: list[int],
+        output_dim: int,
+    ) -> None:
         super().__init__()
         self._input_dim = input_dim
         self._output_dim = output_dim
@@ -36,3 +42,7 @@ class NeuralNetwork(nn.Module):
         stack.append(nn.Linear(hidden_dims[-1], output_dim))
         print(stack)
         return nn.Sequential(*stack)
+
+    def forward(self, x):
+        x = self.linear_relu_stack(x)
+        return F.softmax(x)

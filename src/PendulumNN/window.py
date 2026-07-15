@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pygame
 
+from PendulumNN.ai import DummyModel
 from PendulumNN.common import Colors, Context
 from PendulumNN.screens import Screen, SimulationScreen
 from PendulumNN.simulations import PendulumSimulation
-from PendulumNN.simulations.pendulum_simulation import UpdateStrategy
 
 
 class Window:
@@ -17,8 +17,8 @@ class Window:
                 nodes=2,
                 pendulum_length=50,
                 damping=0.5,
-                update_strategy=UpdateStrategy.EULER,
-            )
+            ),
+            model=DummyModel(),
         )
 
     def __enter__(self) -> Window:

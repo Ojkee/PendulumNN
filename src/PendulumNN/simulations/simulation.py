@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
+import torch
 
 from PendulumNN.common import Context
 
@@ -22,13 +22,13 @@ class Simulation(ABC):
 
     @property
     @abstractmethod
-    def input_state_vector(self) -> np.ndarray: ...
+    def input_state_vector(self) -> torch.Tensor: ...
 
     @abstractmethod
-    def handle_output_vector(self, y: np.ndarray) -> None: ...
-
-    @abstractmethod
-    def fitness(self, ctx: Context) -> np.float64: ...
+    def handle_output_vector(self, y: torch.Tensor) -> torch.Tensor:
+        r"""
+        Simulation handles output and returns loss
+        """
 
     @abstractmethod
     def reset(self) -> None: ...

@@ -1,57 +1,46 @@
-from enum import Enum, auto
 from itertools import pairwise
-from typing import Callable
 from dataclasses import dataclass
 from functools import cache
-
 import pygame
-import numpy as np
-
+import torch
 from PendulumNN.common import Colors, Context
 from PendulumNN.simulations.simulation import Simulation
 
 pos_t = tuple[int, int]
-float_t = np.float64
-strategy_fn = Callable[[], None]
-
-
-class UpdateStrategy(Enum):
-    EULER = auto()
-    RK4 = auto()
+float_t = torch.float64
 
 
 @dataclass
 class _PendulumState:
-    sin_angles: np.ndarray
-    cos_angles: np.ndarray
-    velocities: np.ndarray
-    cart_x: float
-    cart_velocity: float
+    sin_angles: torch.Tensor
+    cos_angles: torch.Tensor
+    velocities: torch.Tensor
+    cart_x: torch.Tensor
+    cart_velocity: torch.Tensor
 
     def norm_cart_x(self, max_x: float) -> None:
-        self.cart_x /= max_x
+        self.cart_x = self.cart_x / max_x
 
-    def as_flat(self) -> np.ndarray:
-        return np.concatenate(
+    def as_flat(self) -> torch.Tensor:
+        return torch.cat(
             [
                 self.sin_angles,
                 self.cos_angles,
                 self.velocities,
-                [self.cart_x, self.cart_velocity],
+                self.cart_x.reshape(1),
+                self.cart_velocity.reshape(1),
             ],
-            dtype=float_t,
         )
 
 
 class PendulumSimulation(Simulation):
     LINE_WIDTH = 2
     CIRCLE_RADIUS = 4
-    NODE_MASS = float_t(2.0)
-    MAX_VELOCITIES = float_t(25.0)  # tested empirically
-
-    CART_ACCELERATION = float_t(10.0)
-    MAX_CAR_VELOCITY = float_t(16.0)  # tested empirically
-    GRAVITY = float_t(9.81)
+    NODE_MASS = 2.0
+    MAX_VELOCITIES = 25.0  # tested empirically
+    CART_ACCELERATION = 10.0
+    MAX_CAR_VELOCITY = 16.0  # tested empirically
+    GRAVITY = 9.81
 
     def __init__(
         self,
@@ -59,44 +48,48 @@ class PendulumSimulation(Simulation):
         pendulum_length: int = 20,
         damping: float = 0.0,
         dt: float = 0.001,
-        update_strategy: UpdateStrategy = UpdateStrategy.EULER,
     ) -> None:
         self._num_nodes = nodes
-
         self._pendulum_scale = pendulum_length
         self._damping_factor = damping
         self._dt = dt
 
-        self._cart_x = 0
-        self._cart_velocity = float_t(0.0)
-        self._cart_acceleration = float_t(0.0)
+        self._cart_x = torch.zeros((), dtype=float_t, requires_grad=False)
+        self._cart_velocity = torch.zeros((), dtype=float_t, requires_grad=False)
+        self._cart_acceleration = torch.zeros((), dtype=float_t, requires_grad=False)
 
-        self._lens = np.ones(self._num_nodes, dtype=float_t)
-        self._masses = np.ones(self._num_nodes, dtype=float_t) * self.NODE_MASS
-        self._starting_angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
-        self._angles = self._starting_angles
-        self._angles[-1] += np.random.uniform(-0.1, 0.1)
-        self._velocities = np.zeros(self._num_nodes, dtype=float_t)
+        self._lens = torch.ones(self._num_nodes, dtype=float_t, requires_grad=False)
+        self._masses = (
+            torch.ones(self._num_nodes, dtype=float_t, requires_grad=False)
+            * self.NODE_MASS
+        )
+        self._starting_angles = (
+            torch.ones(self._num_nodes, dtype=float_t, requires_grad=False) * torch.pi
+        )
+
+        self._angles = self._starting_angles.clone()
+        self._angles[-1] += (torch.rand((), dtype=float_t) * 2 - 1) * 0.1
+
+        self._velocities = torch.zeros(
+            self._num_nodes, dtype=float_t, requires_grad=False
+        )
 
         self._update_forces = (
             self._damping,
             self._cart_velocity_influence,
         )
-
-        self._update_strategy_type = update_strategy
-        self._update_strategies: dict[UpdateStrategy, strategy_fn] = {
-            UpdateStrategy.EULER: self._euler_strategy,
-            UpdateStrategy.RK4: self._rk4_strategy,
-        }
-
         self.reset()
 
     def draw(self, ctx: Context) -> None:
         offset_x = ctx.width // 2
         offset_y = ctx.height // 2
-        cart_x = int(self._cart_x * self._pendulum_scale) + offset_x
+        cart_x = int(self._cart_x.item() * self._pendulum_scale) + offset_x
         origin = [(cart_x, offset_y)]
-        nodes = list(zip(self._xs() + offset_x, -self._ys() + offset_y))
+
+        xs = (self._xs() + offset_x).tolist()
+        ys = (-self._ys() + offset_y).tolist()
+        nodes = list(zip(xs, ys))
+
         for lhs, rhs in pairwise(origin + nodes):
             self._line(ctx.surface, lhs, rhs)
             self._point(ctx.surface, rhs)
@@ -139,143 +132,95 @@ class PendulumSimulation(Simulation):
         text_surface = font.render(text, False, Colors.BEIGE)
         surface.blit(text_surface, pos)
 
+    @torch.no_grad()
     def update(self) -> None:
-        self.update_strategy()
-        self._cart_acceleration = float_t(0)
+        self._euler_strategy()
+        self._cart_acceleration = torch.zeros((), dtype=float_t)
 
+    @torch.no_grad()
     def _euler_strategy(self) -> None:
         self._velocities += self.alpha * self._dt
         self._angles += self._velocities * self._dt
-
         self._cart_velocity += self._cart_acceleration * self._dt
         self._cart_velocity *= 1.0 - self._damping_factor * self._dt
         self._cart_x += self._cart_velocity * self._dt
 
-    def _rk4_strategy(self) -> None:
-        a, v = self._angles.copy(), self._velocities.copy()
-        x, cv = self._cart_x, self._cart_velocity
-        ca = self._cart_acceleration
-
-        dt = self._dt
-
-        dv1, da1, dx1, dcv1 = self._derivatives(a, v, x, cv, ca)
-        dv2, da2, dx2, dcv2 = self._derivatives(
-            a + dt / 2 * da1, v + dt / 2 * dv1, x + dt / 2 * dx1, cv + dt / 2 * dcv1, ca
+    def _xs(self) -> torch.Tensor:
+        positions = torch.cumsum(
+            self._pendulum_scale * self._lens * torch.sin(self._angles),
+            dim=0,
         )
-        dv3, da3, dx3, dcv3 = self._derivatives(
-            a + dt / 2 * da2, v + dt / 2 * dv2, x + dt / 2 * dx2, cv + dt / 2 * dcv2, ca
+        cart_offset = self._cart_x * self._pendulum_scale
+        return (positions + cart_offset).round().to(torch.int64)
+
+    def _ys(self) -> torch.Tensor:
+        positions = torch.cumsum(
+            -self._pendulum_scale * self._lens * torch.cos(self._angles),
+            dim=0,
         )
-        dv4, da4, dx4, dcv4 = self._derivatives(
-            a + dt * da3, v + dt * dv3, x + dt * dx3, cv + dt * dcv3, ca
-        )
-
-        self._angles += dt / 6 * (da1 + 2 * da2 + 2 * da3 + da4)
-        self._velocities += dt / 6 * (dv1 + 2 * dv2 + 2 * dv3 + dv4)
-        self._cart_x += dt / 6 * (dx1 + 2 * dx2 + 2 * dx3 + dx4)
-        self._cart_velocity += dt / 6 * (dcv1 + 2 * dcv2 + 2 * dcv3 + dcv4)
-
-    def _derivatives(self, angles, velocities, cart_x, cart_vel, cart_acc):
-        old_a, old_v, old_x, old_cv = (
-            self._angles,
-            self._velocities,
-            self._cart_x,
-            self._cart_velocity,
-        )
-        self._angles, self._velocities, self._cart_x, self._cart_velocity = (
-            angles,
-            velocities,
-            cart_x,
-            cart_vel,
-        )
-        self._cart_acceleration = cart_acc
-
-        alpha = self.alpha  # ← tutaj, przed przywróceniem
-        friction = self._damping_factor * cart_vel
-
-        self._angles, self._velocities, self._cart_x, self._cart_velocity = (
-            old_a,
-            old_v,
-            old_x,
-            old_cv,
-        )
-
-        return velocities, alpha, cart_vel, cart_acc - friction
-
-    def _xs(self) -> np.ndarray:
-        return np.cumsum(
-            self._pendulum_scale * self._lens * np.sin(self._angles),
-            dtype=np.int16,
-        ) + np.int16(self._cart_x * self._pendulum_scale)
-
-    def _ys(self) -> np.ndarray:
-        return np.cumsum(
-            -self._pendulum_scale * self._lens * np.cos(self._angles),
-            dtype=np.int16,
-        )
+        return positions.round().to(torch.int64)
 
     @property
-    def alpha(self) -> np.ndarray:
-        return np.linalg.solve(self.M, self.f)
+    def alpha(self) -> torch.Tensor:
+        with torch.no_grad():
+            return torch.linalg.solve(self.M, self.f)
 
     @property
-    def M(self) -> np.ndarray:
-        _M = np.zeros(shape=(self._num_nodes, self._num_nodes))
-        for i in range(self._num_nodes):
-            for j in range(self._num_nodes):
-                lhs = np.sum(self._masses[max(i, j) :])
-                rhs = (
-                    self._lens[i]
-                    * self._lens[j]
-                    * np.cos(self._angles[i] - self._angles[j])
-                )
-                _M[i][j] = lhs * rhs
-        return _M
+    def M(self) -> torch.Tensor:
+        with torch.no_grad():
+            _M = torch.zeros(self._num_nodes, self._num_nodes, dtype=float_t)
+            for i in range(self._num_nodes):
+                for j in range(self._num_nodes):
+                    lhs = torch.sum(self._masses[max(i, j) :])
+                    rhs = (
+                        self._lens[i]
+                        * self._lens[j]
+                        * torch.cos(self._angles[i] - self._angles[j])
+                    )
+                    _M[i, j] = lhs * rhs
+            return _M
 
     @property
-    def f(self) -> np.ndarray:
-        f = np.zeros(self._num_nodes)
-        grav = PendulumSimulation.GRAVITY * self._lens * np.sin(self._angles)
-        for i in range(self._num_nodes):
-            lhs_masses = np.sum(self._masses[i:])
-            lhs = lhs_masses * grav[i]
-            rhs_array = np.zeros(self._num_nodes)
-            for j in range(self._num_nodes):
-                k = max(i, j)
-                masses = np.sum(self._masses[k:])
-                sin_diff = (
-                    self._lens[i]
-                    * self._lens[j]
-                    * np.pow(self._velocities[j], 2)
-                    * np.sin(self._angles[i] - self._angles[j])
-                )
-                rhs_array[j] = masses * sin_diff
-            rhs = np.sum(rhs_array)
-            f[i] = -lhs - rhs
-            for force in self._update_forces:
-                f[i] -= force(i)
+    def f(self) -> torch.Tensor:
+        with torch.no_grad():
+            f = torch.zeros(self._num_nodes, dtype=float_t)
+            grav = PendulumSimulation.GRAVITY * self._lens * torch.sin(self._angles)
+            for i in range(self._num_nodes):
+                lhs_masses = torch.sum(self._masses[i:])
+                lhs = lhs_masses * grav[i]
+                rhs_array = torch.zeros(self._num_nodes, dtype=float_t)
+                for j in range(self._num_nodes):
+                    k = max(i, j)
+                    masses = torch.sum(self._masses[k:])
+                    sin_diff = (
+                        self._lens[i]
+                        * self._lens[j]
+                        * torch.pow(self._velocities[j], 2)
+                        * torch.sin(self._angles[i] - self._angles[j])
+                    )
+                    rhs_array[j] = masses * sin_diff
+                rhs = torch.sum(rhs_array)
+                f[i] = -lhs - rhs
+                for force in self._update_forces:
+                    f[i] -= force(i)
+            return f
 
-        return f
-
-    @property
-    def update_strategy(self) -> strategy_fn:
-        return self._update_strategies[self._update_strategy_type]
-
-    def _damping(self, i: int) -> float_t:
+    def _damping(self, i: int) -> torch.Tensor:
         return self._damping_factor * self._velocities[i]
 
-    def _cart_velocity_influence(self, i: int) -> float_t:
+    def _cart_velocity_influence(self, i: int) -> torch.Tensor:
         return (
-            np.sum(self._masses[i:])
+            torch.sum(self._masses[i:])
             * self._lens[i]
-            * np.cos(self._angles[i])
+            * torch.cos(self._angles[i])
             * self._cart_acceleration
         )
 
     @property
     def state(self) -> _PendulumState:
         return _PendulumState(
-            sin_angles=np.sin(self._angles),
-            cos_angles=np.cos(self._angles),
+            sin_angles=torch.sin(self._angles),
+            cos_angles=torch.cos(self._angles),
             velocities=self._velocities / PendulumSimulation.MAX_VELOCITIES,
             cart_x=self._cart_x,
             cart_velocity=self._cart_velocity / PendulumSimulation.MAX_CAR_VELOCITY,
@@ -292,32 +237,40 @@ class PendulumSimulation(Simulation):
         return 3  # left, stay, right
 
     @property
-    def input_state_vector(self) -> np.ndarray:
+    def input_state_vector(self) -> torch.Tensor:
         return self.state.as_flat()
 
-    def handle_output_vector(self, y: np.ndarray) -> None:
-        match int(np.argmax(y)):
+    def handle_output_vector(self, y: torch.Tensor) -> None:
+        match int(torch.argmax(y)):
             case 0:  # ACCELERATE LEFT
-                self._cart_acceleration = -PendulumSimulation.CART_ACCELERATION
+                self._cart_acceleration = torch.tensor(
+                    -PendulumSimulation.CART_ACCELERATION, dtype=float_t
+                )
             case 1:  # STAY
                 pass
             case 2:  # ACCELERATE RIGHT
-                self._cart_acceleration = PendulumSimulation.CART_ACCELERATION
+                self._cart_acceleration = torch.tensor(
+                    PendulumSimulation.CART_ACCELERATION, dtype=float_t
+                )
 
-    def fitness(self, ctx: Context) -> np.float64:
+    def fitness(self, ctx: Context) -> torch.Tensor:
         state = self.state
         state.norm_cart_x(ctx.width // 2)
-        angle_loss = np.sum(1.0 + state.cos_angles)
-        far_from_center = np.abs(state.cart_x)
-        velocity_penalty = np.sum(np.abs(state.velocities))
+        angle_loss = torch.sum(1.0 + state.cos_angles)
+        far_from_center = torch.abs(state.cart_x)
+        velocity_penalty = torch.sum(torch.abs(state.velocities))
         return angle_loss + 0.1 * far_from_center + 0.05 * velocity_penalty
 
+    @torch.no_grad()
     def reset(self) -> None:
-        rng = np.random.default_rng()
-        self._cart_x = 0
-        self._cart_velocity = float_t(0.0)
-        self._cart_acceleration = float_t(0.0)
-        self._angles = self._starting_angles
+        self._cart_x = torch.zeros((), dtype=float_t)
+        self._cart_velocity = torch.zeros((), dtype=float_t)
+        self._cart_acceleration = torch.zeros((), dtype=float_t)
+
+        self._angles = self._starting_angles.clone()
         angle_noise: float = 0.05
-        self._angles += rng.uniform(-angle_noise, angle_noise, size=self._num_nodes)
-        self._velocities = np.zeros(self._num_nodes, dtype=float_t)
+        self._angles += (
+            torch.rand(self._num_nodes, dtype=float_t) * 2 - 1
+        ) * angle_noise
+
+        self._velocities = torch.zeros(self._num_nodes, dtype=float_t)

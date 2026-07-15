@@ -1,9 +1,6 @@
-# model = NeuralNetwork(
-# input_dim=len(self._pendulum.stats.as_flat()),
-# ).to(NeuralNetwork.DEVICE)
-#
+from abc import ABC
 
 
-class AIModel:
+class AIModel(ABC):
     def __init__(self) -> None:
         pass
