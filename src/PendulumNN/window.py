@@ -5,6 +5,7 @@ import pygame
 from PendulumNN.common import Colors, Context
 from PendulumNN.screens import Screen, SimulationScreen
 from PendulumNN.simulations import PendulumSimulation
+from PendulumNN.simulations.pendulum_simulation import UpdateStrategy
 
 
 class Window:
@@ -13,9 +14,10 @@ class Window:
         self._running: bool = True
         self._current_screen: Screen = SimulationScreen(
             simulation=PendulumSimulation(
-                nodes=1,
+                nodes=2,
                 pendulum_length=50,
-                damping=0.25,
+                damping=0.5,
+                update_strategy=UpdateStrategy.EULER,
             )
         )
 

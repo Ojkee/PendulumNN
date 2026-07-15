@@ -1,13 +1,11 @@
 # TODO
 - [ ] Settings menu / config file
 - [ ] AI
-  - [ ] AutoML
+  - [ ] Own Neural Net
   - [ ] NEAT 
+  - [ ] AutoML
 - [ ] Neural Network visualisation
 - [ ] Training off screen
-- [ ] Make interface for other simulations 
-  - [ ] Generalize stats
-  - [ ] input/output protocols
 
 # ONGOING
 - [ ] Neural Network reimplementation
@@ -15,3 +13,4 @@
 
 # DONE
 - [x] N-Pendulum simulation
+- [x] Make interface for other simulations 

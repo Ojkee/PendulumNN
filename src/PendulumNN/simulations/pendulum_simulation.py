@@ -73,7 +73,8 @@ class PendulumSimulation(Simulation):
 
         self._lens = np.ones(self._num_nodes, dtype=float_t)
         self._masses = np.ones(self._num_nodes, dtype=float_t) * self.NODE_MASS
-        self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        self._starting_angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        self._angles = self._starting_angles
         self._angles[-1] += np.random.uniform(-0.1, 0.1)
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
 
@@ -316,7 +317,7 @@ class PendulumSimulation(Simulation):
         self._cart_x = 0
         self._cart_velocity = float_t(0.0)
         self._cart_acceleration = float_t(0.0)
-        self._angles = np.ones(self._num_nodes, dtype=float_t) * np.pi
+        self._angles = self._starting_angles
         angle_noise: float = 0.05
         self._angles += rng.uniform(-angle_noise, angle_noise, size=self._num_nodes)
         self._velocities = np.zeros(self._num_nodes, dtype=float_t)
