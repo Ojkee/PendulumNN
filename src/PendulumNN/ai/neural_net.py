@@ -3,7 +3,8 @@ from itertools import pairwise
 import torch
 
 from torch import nn
-import torch.nn.functional as F
+
+from PendulumNN.common import Context
 
 
 class NeuralNetwork(nn.Module):
@@ -19,10 +20,15 @@ class NeuralNetwork(nn.Module):
         super().__init__()
         self._input_dim = input_dim
         self._output_dim = output_dim
-        self.linear_relu_stack = NeuralNetwork._build_stack(
+        self._layers = NeuralNetwork._build_stack(
             input_dim,
             hidden_dims,
             output_dim,
+        )
+        self.out: torch.Tensor
+
+        self._optimizer = torch.optim.AdamW(  # type: ignore
+            self._layers.parameters(), lr=1e-3, weight_decay=0.1
         )
 
     @staticmethod
@@ -40,9 +46,17 @@ class NeuralNetwork(nn.Module):
         for inn, out in pairwise(hidden_dims):
             stack.extend([nn.Linear(inn, out), nn.ReLU()])
         stack.append(nn.Linear(hidden_dims[-1], output_dim))
-        print(stack)
         return nn.Sequential(*stack)
 
+    def draw(self, ctx: Context) -> None:
+        _ = ctx
+        pass
+
     def forward(self, x):
-        x = self.linear_relu_stack(x)
-        return F.softmax(x)
+        self.out = self._layers(x)
+        return self.out
+
+    def update(self, loss: torch.Tensor) -> None:
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()

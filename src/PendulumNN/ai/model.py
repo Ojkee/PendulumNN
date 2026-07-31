@@ -1,6 +1,11 @@
-from abc import ABC
+from typing import Protocol
+
+import torch
+
+from PendulumNN.common import Context
 
 
-class AIModel(ABC):
-    def __init__(self) -> None:
-        pass
+class AIModel(Protocol):
+    def __call__(self, x) -> torch.Tensor: ...
+    def draw(self, ctx: Context) -> None: ...
+    def update(self, loss: torch.Tensor) -> None: ...

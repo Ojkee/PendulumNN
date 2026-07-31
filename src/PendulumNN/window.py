@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pygame
 
-from PendulumNN.ai import DummyModel
+from PendulumNN.ai.neural_net import NeuralNetwork
 from PendulumNN.common import Colors, Context
 from PendulumNN.screens import Screen, SimulationScreen
 from PendulumNN.simulations import PendulumSimulation
@@ -12,13 +12,12 @@ class Window:
     def __init__(self, width: int, height: int) -> None:
         self.ctx = Context(width, height)
         self._running: bool = True
+        _simulation = PendulumSimulation(nodes=1, pendulum_length=50, damping=0.25)
         self._current_screen: Screen = SimulationScreen(
-            simulation=PendulumSimulation(
-                nodes=1,
-                pendulum_length=50,
-                damping=0.5,
-            ),
-            model=DummyModel(),
+            simulation=_simulation,
+            model=NeuralNetwork(
+                _simulation.input_dim, [8, 8], _simulation.output_dim
+            ).to("cuda"),
             ctx=self.ctx,
         )
 

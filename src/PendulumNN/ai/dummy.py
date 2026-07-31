@@ -1,5 +1,7 @@
-from PendulumNN.ai.model import AIModel
+from PendulumNN.common import Context
 
 
-class DummyModel(AIModel):
-    pass
+class DummyModel:
+    def draw(self, ctx: Context) -> None:
+        _ = ctx
+        pass
