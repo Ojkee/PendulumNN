@@ -82,7 +82,16 @@ class PendulumSimulation(Simulation):
 
     def draw(self, ctx: Context) -> None:
         offset_x = ctx.width // 2
-        offset_y = ctx.height // 2
+        offset_y = ctx.height // 4
+        self._draw_axis(offset_x, offset_y, ctx.width, ctx.surface)
+        self._draw_pendulum(offset_x, offset_y, ctx.surface)
+
+    def _draw_pendulum(
+        self,
+        offset_x: int,
+        offset_y: int,
+        surface: pygame.Surface,
+    ) -> None:
         cart_x = int(self._cart_x.item() * self._pendulum_scale) + offset_x
         origin = [(cart_x, offset_y)]
 
@@ -91,24 +100,29 @@ class PendulumSimulation(Simulation):
         nodes = list(zip(xs, ys))
 
         for lhs, rhs in pairwise(origin + nodes):
-            self._line(ctx.surface, lhs, rhs)
-            self._point(ctx.surface, rhs)
-        self._draw_axis(ctx)
+            self._line(surface, lhs, rhs)
+            self._point(surface, rhs)
 
-    def _draw_axis(self, ctx: Context) -> None:
-        for h in range(100, ctx.height // 2 + 100, 10):
+    def _draw_axis(
+        self,
+        offset_x: int,
+        offset_y: int,
+        screen_width: int,
+        surface: pygame.Surface,
+    ) -> None:
+        for h in range(offset_y - 100, offset_y + 100, 10):
             pygame.draw.circle(
-                ctx.surface,
-                Colors.BEIGE,
-                (ctx.width // 2, h),
+                surface,
+                Colors.LIGHT_GREY,
+                (offset_x, h),
                 radius=1,
                 width=1,
             )
         pygame.draw.line(
-            ctx.surface,
+            surface,
             Colors.BEIGE,
-            (0, ctx.height // 2),
-            (ctx.width, ctx.height // 2),
+            (0, offset_y),
+            (screen_width, offset_y),
             width=1,
         )
 
@@ -254,10 +268,14 @@ class PendulumSimulation(Simulation):
                 )
 
     def reward(self, ctx: Context) -> torch.Tensor:
-        return -self._fitness(ctx)
+        return -self.loss(ctx)
 
-    def loss(self) -> torch.Tensor:
-        raise NotImplementedError()
+    def loss(self, ctx: Context) -> torch.Tensor:
+        state = self.state
+        state.norm_cart_x(ctx.width // 2)
+        angle_loss = torch.sum(1.0 + state.cos_angles)
+        far_from_center = torch.abs(state.cart_x)
+        return angle_loss + 0.1 * far_from_center
 
     @torch.no_grad()
     def reset(self) -> None:
@@ -272,11 +290,3 @@ class PendulumSimulation(Simulation):
         ) * angle_noise
 
         self._velocities = torch.zeros(self._num_nodes, dtype=float_t)
-
-    def _fitness(self, ctx: Context) -> torch.Tensor:
-        state = self.state
-        state.norm_cart_x(ctx.width // 2)
-        angle_loss = torch.sum(1.0 + state.cos_angles)
-        far_from_center = torch.abs(state.cart_x)
-        velocity_penalty = torch.sum(torch.abs(state.velocities))
-        return angle_loss + 0.1 * far_from_center + 0.05 * velocity_penalty
