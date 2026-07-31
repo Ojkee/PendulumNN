@@ -16,7 +16,9 @@ class Window:
         self._current_screen: Screen = SimulationScreen(
             simulation=_simulation,
             model=NeuralNetwork(
-                _simulation.input_dim, [8, 8], _simulation.output_dim
+                _simulation.input_dim,
+                [16, 16, 16],
+                _simulation.output_dim,
             ).to("cuda"),
             ctx=self.ctx,
         )

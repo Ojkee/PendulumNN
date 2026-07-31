@@ -28,7 +28,7 @@ class NeuralNetwork(nn.Module):
         self.out: torch.Tensor
 
         self._optimizer = torch.optim.AdamW(  # type: ignore
-            self._layers.parameters(), lr=1e-3, weight_decay=0.1
+            self._layers.parameters(), lr=5e-2, weight_decay=0.1
         )
 
     @staticmethod

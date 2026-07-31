@@ -35,7 +35,7 @@ class PendulumSimulation(Simulation):
     CIRCLE_RADIUS = 4
     NODE_MASS = 2.0
     MAX_VELOCITIES = 25.0  # tested empirically
-    CART_ACCELERATION = 10.0
+    CART_ACCELERATION = 12.0
     MAX_CAR_VELOCITY = 16.0  # tested empirically
     GRAVITY = 9.81
 

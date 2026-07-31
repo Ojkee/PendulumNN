@@ -25,12 +25,13 @@ class SimulationScreen(Screen):
         self.training = False
 
         self._simulation.reset()
+        self._steps_per_simulation = 2500
+        self._epochs = 500
 
     def handle_event(self) -> None:
         state = self._simulation.input_state_vector
         logits = self._model(state.to("cuda"))
-        dist = Categorical(logits=logits)
-        action = dist.sample()
+        action = Categorical(logits=logits).sample()
         self._simulation.handle_output_vector(
             F.one_hot(action, self._simulation.output_dim)
         )
@@ -39,7 +40,7 @@ class SimulationScreen(Screen):
 
     def update(self) -> None:
         if self.training:
-            self.train_model(epochs=100)
+            self.train_model()
             self.switch_train()
 
         self._simulation.update()
@@ -49,18 +50,20 @@ class SimulationScreen(Screen):
         self._model.draw(ctx)
 
     def _user_control(self) -> None:
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_r]:
-            self.switch_train()
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_t:
+                    self.switch_train()
+                elif event.key == pygame.K_r:
+                    self._simulation.reset()
 
-    def train_model(self, epochs: int) -> None:
-        SIM_STEPS = 500
+    def train_model(self) -> None:
         GAMMA = 0.99
-        for epoch in range(epochs):
+        for epoch in range(self._epochs):
             self._simulation.reset()
 
-            log_probs, rewards = self._one_simulation(SIM_STEPS)
-            episode_return = torch.stack(rewards).sum().item()  # <- TO loguj
+            log_probs, rewards = self._one_simulation()
+            episode_return = torch.stack(rewards).sum().item()
 
             returns = []
             G = torch.tensor(0.0)
@@ -71,22 +74,21 @@ class SimulationScreen(Screen):
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             loss = -torch.sum(torch.stack(log_probs) * returns.to("cuda"))
             self._model.update(loss)
+            # print(self._model._layers[0].weight)
 
             episode_return = torch.stack(rewards).sum().item()
             mean_step_loss = -episode_return / len(rewards)
             if epoch % 50 == 0:
                 print(
-                    f"{epoch:>3}/{epochs}   "
+                    f"{epoch:>3}/{self._epochs}   "
                     f"surrogate_loss={loss.item():.4f}   "
                     f"mean_step_loss={mean_step_loss:.4f}"
                 )
 
-    def _one_simulation(
-        self, steps: int
-    ) -> tuple[list[torch.Tensor], list[torch.torch.Tensor]]:
+    def _one_simulation(self) -> tuple[list[torch.Tensor], list[torch.torch.Tensor]]:
         log_probs = []
         rewards = []
-        for _ in range(steps):
+        for _ in range(self._steps_per_simulation):
             state = self._simulation.input_state_vector
             logits = self._model(state.to("cuda"))
             dist = Categorical(logits=logits)
