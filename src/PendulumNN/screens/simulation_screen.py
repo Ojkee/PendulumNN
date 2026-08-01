@@ -23,10 +23,10 @@ class SimulationScreen(Screen):
         self._ctx = ctx
 
         self.training = False
+        self._steps_per_simulation = 1500
+        self._epochs = 100
 
         self._simulation.reset()
-        self._steps_per_simulation = 2500
-        self._epochs = 500
 
     def handle_event(self) -> None:
         state = self._simulation.input_state_vector
@@ -59,47 +59,48 @@ class SimulationScreen(Screen):
 
     def train_model(self) -> None:
         GAMMA = 0.99
+        UPDATE_EVERY = 50  # co ile kroków robić backward()
         for epoch in range(self._epochs):
             self._simulation.reset()
-
-            log_probs, rewards = self._one_simulation()
-            episode_return = torch.stack(rewards).sum().item()
-
-            returns = []
-            G = torch.tensor(0.0)
-            for r in reversed(rewards):
-                G = r + GAMMA * G
-                returns.insert(0, G)
-            returns = torch.stack(returns)
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-            loss = -torch.sum(torch.stack(log_probs) * returns.to("cuda"))
-            self._model.update(loss)
-            # print(self._model._layers[0].weight)
-
-            episode_return = torch.stack(rewards).sum().item()
-            mean_step_loss = -episode_return / len(rewards)
+            self._run_episode(GAMMA, UPDATE_EVERY)
             if epoch % 50 == 0:
-                print(
-                    f"{epoch:>3}/{self._epochs}   "
-                    f"surrogate_loss={loss.item():.4f}   "
-                    f"mean_step_loss={mean_step_loss:.4f}"
-                )
+                print(f"{epoch:>3}/{self._epochs}")
 
-    def _one_simulation(self) -> tuple[list[torch.Tensor], list[torch.torch.Tensor]]:
-        log_probs = []
-        rewards = []
-        for _ in range(self._steps_per_simulation):
+    def _run_episode(self, gamma: float, update_every: int) -> None:
+        log_probs, rewards = [], []
+        for step in range(self._steps_per_simulation):
             state = self._simulation.input_state_vector
             logits = self._model(state.to("cuda"))
             dist = Categorical(logits=logits)
             action = dist.sample()
             log_probs.append(dist.log_prob(action))
+
             self._simulation.handle_output_vector(
                 F.one_hot(action, self._simulation.output_dim)
             )
             self._simulation.update()
             rewards.append(self._simulation.reward(self._ctx))
-        return log_probs, rewards
+
+            if len(rewards) == update_every or step == self._steps_per_simulation - 1:
+                self._update_from_window(log_probs, rewards, gamma)
+                log_probs, rewards = [], []
+                # print(self._model._layers[0].weight)
+
+    def _update_from_window(
+        self,
+        log_probs: list[torch.Tensor],
+        rewards: list[torch.Tensor],
+        gamma: float,
+    ) -> None:
+        returns = []
+        G = torch.tensor(0.0)
+        for r in reversed(rewards):
+            G = r + gamma * G
+            returns.insert(0, G)
+        returns = torch.stack(returns)
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        loss = -torch.sum(torch.stack(log_probs) * returns.to("cuda"))
+        self._model.update(loss)
 
     def switch_train(self):
         self.training = not self.training

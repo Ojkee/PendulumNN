@@ -44,7 +44,7 @@ class PendulumSimulation(Simulation):
         nodes: int,
         pendulum_length: int = 20,
         damping: float = 0.0,
-        dt: float = 0.001,
+        dt: float = 0.002,
     ) -> None:
         self._num_nodes = nodes
         self._pendulum_scale = pendulum_length
@@ -247,18 +247,34 @@ class PendulumSimulation(Simulation):
                 )
 
     def reward(self, ctx: Context) -> torch.Tensor:
-        return -self.loss(ctx)
+        MAX_POINTS = 10.0
+        angle_reward = self._angle_reward(MAX_POINTS)
+        max_cart_x = (ctx.width // 2) / self._pendulum_scale
+        normalized_cart_x = (self._cart_x / max_cart_x).abs()
+        return angle_reward - normalized_cart_x
+
+    def _angle_reward(self, max_points: float) -> torch.Tensor:
+        angle_diff = self._angle_diff(self.state.angles, torch.pi).abs().sum()
+        if angle_diff < torch.pi / 4:
+            return torch.tensor(max_points)
+        elif angle_diff < torch.pi / 3:
+            return torch.tensor(max_points * 0.5)
+        elif angle_diff < torch.pi / 2:
+            return torch.tensor(0.0)
+        return torch.tensor(-max_points * 0.1)
 
     def loss(self, ctx: Context) -> torch.Tensor:
-        def _angle_diff(angle: torch.Tensor, target) -> torch.Tensor:
-            diff = angle - target
-            return torch.atan2(torch.sin(diff), torch.cos(diff))
+        # state = self.state
+        # state.norm_cart_x(ctx.width // 2)
+        # angle_loss = self._angle_diff(state.angles, torch.pi).abs().sum()
+        # far_from_center = torch.abs(state.cart_x)
+        # return angle_loss + 0.01 * far_from_center
+        return -self.reward(ctx)
 
-        state = self.state
-        state.norm_cart_x(ctx.width // 2)
-        angle_loss = _angle_diff(state.angles, torch.pi).abs().sum()
-        far_from_center = torch.abs(state.cart_x)
-        return angle_loss + 0.01 * far_from_center
+    @staticmethod
+    def _angle_diff(angle: torch.Tensor, target) -> torch.Tensor:
+        diff = angle - target
+        return torch.atan2(torch.sin(diff), torch.cos(diff))
 
     @torch.no_grad()
     def reset(self) -> None:
