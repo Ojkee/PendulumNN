@@ -80,6 +80,17 @@ class _NeuralNetworkDrawer:
         xs = self._xs(ctx.width, offset[0])
         ys = self._ys(ctx.height, offset[1])
 
+        for i in range(len(xs) - 1):
+            for j in range(len(ys[i])):
+                for k in range(len(ys[i + 1])):
+                    pygame.draw.line(
+                        ctx.surface,
+                        Colors.BEIGE,
+                        (xs[i], ys[i][j]),
+                        (xs[i + 1], ys[i + 1][k]),
+                        width=1,
+                    )
+
         for i, x in enumerate(xs):
             for y in ys[i]:
                 pygame.draw.circle(ctx.surface, Colors.BEIGE, (x, y), radius=4)
