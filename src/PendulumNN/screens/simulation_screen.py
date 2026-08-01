@@ -47,7 +47,7 @@ class SimulationScreen(Screen):
 
     def draw(self, ctx: Context) -> None:
         self._simulation.draw(ctx)
-        self._model.draw(ctx)
+        self._model.draw(ctx, (0, ctx.height // 2))
 
     def _user_control(self) -> None:
         for event in pygame.event.get():

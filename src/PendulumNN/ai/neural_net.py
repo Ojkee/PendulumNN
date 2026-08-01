@@ -1,10 +1,12 @@
+from functools import cache
 from itertools import pairwise
 
+import pygame
 import torch
 
 from torch import nn
 
-from PendulumNN.common import Context
+from PendulumNN.common import Colors, Context
 
 
 class NeuralNetwork(nn.Module):
@@ -20,6 +22,7 @@ class NeuralNetwork(nn.Module):
         super().__init__()
         self._input_dim = input_dim
         self._output_dim = output_dim
+        self._hidden_dims = hidden_dims
         self._layers = NeuralNetwork._build_stack(
             input_dim,
             hidden_dims,
@@ -31,6 +34,10 @@ class NeuralNetwork(nn.Module):
             self._layers.parameters(),
             lr=1e-3,
             # weight_decay=0.1,
+        )
+
+        self.drawer = _NeuralNetworkDrawer(
+            [self._input_dim] + self._hidden_dims + [self._output_dim]
         )
 
     @staticmethod
@@ -50,9 +57,8 @@ class NeuralNetwork(nn.Module):
         stack.append(nn.Linear(hidden_dims[-1], output_dim))
         return nn.Sequential(*stack)
 
-    def draw(self, ctx: Context) -> None:
-        _ = ctx
-        pass
+    def draw(self, ctx: Context, offset: tuple[int, int]) -> None:
+        self.drawer.draw(ctx, offset)
 
     def forward(self, x):
         self.out = self._layers(x)
@@ -62,3 +68,37 @@ class NeuralNetwork(nn.Module):
         self._optimizer.zero_grad()
         loss.backward()
         self._optimizer.step()
+
+
+class _NeuralNetworkDrawer:
+    MAX_INTERVAL_Y = 10
+
+    def __init__(self, dims: list[int]) -> None:
+        self._dims = dims
+
+    def draw(self, ctx: Context, offset: tuple[int, int]) -> None:
+        xs = self._xs(ctx.width, offset[0])
+        ys = self._ys(ctx.height, offset[1])
+
+        for i, x in enumerate(xs):
+            for y in ys[i]:
+                pygame.draw.circle(ctx.surface, Colors.BEIGE, (x, y), radius=4)
+
+    @cache
+    def _xs(self, screen_width: int, offset: int) -> list[int]:
+        width = screen_width - offset
+        interval_x = width // (len(self._dims) + 1)
+        cx = (width - interval_x * (len(self._dims) - 1)) // 2
+        return [cx + offset + interval_x * i for i in range(len(self._dims))]
+
+    @cache
+    def _ys(self, screen_height: int, offset: int) -> list[list[int]]:
+        height = screen_height - offset
+
+        result = []
+        for dim in self._dims:
+            interval = max(self.MAX_INTERVAL_Y, height // (dim + 1))
+            col_offset = (height - (dim - 1) * interval) // 2
+            column = [offset + col_offset + i * interval for i in range(dim)]
+            result.append(column)
+        return result
