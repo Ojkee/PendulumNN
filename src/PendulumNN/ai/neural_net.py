@@ -59,7 +59,7 @@ class NeuralNetwork(nn.Module):
 
     def draw(self, ctx: Context, offset: tuple[int, int]) -> None:
         linears = [layer for layer in self._layers if isinstance(layer, nn.Linear)]
-        self.drawer.draw(ctx, offset, linears)
+        self.drawer.draw(ctx, offset, linears, self.out)
 
     def forward(self, x):
         self.out = self._layers(x)
@@ -82,6 +82,7 @@ class _NeuralNetworkDrawer:
         ctx: Context,
         offset: tuple[int, int],
         linears: list[nn.Linear],
+        out: torch.Tensor,
     ) -> None:
         xs = self._xs(ctx.width, offset[0])
         ys = self._ys(ctx.height, offset[1])
@@ -98,9 +99,13 @@ class _NeuralNetworkDrawer:
                     color = Colors.RED if weights[k, j] <= 0.0 else Colors.GREEN
                     _line(i, j, k, color)
 
-        for i, x in enumerate(xs):
+        for i, x in enumerate(xs[:-1]):
             for y in ys[i]:
                 pygame.draw.circle(ctx.surface, Colors.BEIGE, (x, y), radius=4)
+
+        for i, y in enumerate(ys[-1]):
+            color = Colors.RED if out[i] <= 0 else Colors.GREEN
+            pygame.draw.circle(ctx.surface, color, (xs[-1], y), radius=4)
 
     @cache
     def _xs(self, screen_width: int, offset: int) -> list[int]:
