@@ -9,6 +9,8 @@ class Colors(tuple[int, int, int], Enum):
     BEIGE = (255, 248, 231)
     GREY = (51, 51, 51)
     LIGHT_GREY = (131, 131, 131)
+    RED = (255, 100, 100)
+    GREEN = (100, 255, 100)
 
 
 @dataclass

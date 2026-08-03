@@ -58,7 +58,8 @@ class NeuralNetwork(nn.Module):
         return nn.Sequential(*stack)
 
     def draw(self, ctx: Context, offset: tuple[int, int]) -> None:
-        self.drawer.draw(ctx, offset)
+        linears = [layer for layer in self._layers if isinstance(layer, nn.Linear)]
+        self.drawer.draw(ctx, offset, linears)
 
     def forward(self, x):
         self.out = self._layers(x)
@@ -76,20 +77,26 @@ class _NeuralNetworkDrawer:
     def __init__(self, dims: list[int]) -> None:
         self._dims = dims
 
-    def draw(self, ctx: Context, offset: tuple[int, int]) -> None:
+    def draw(
+        self,
+        ctx: Context,
+        offset: tuple[int, int],
+        linears: list[nn.Linear],
+    ) -> None:
         xs = self._xs(ctx.width, offset[0])
         ys = self._ys(ctx.height, offset[1])
 
+        def _line(i: int, j: int, k: int, color: Colors = Colors.BEIGE) -> None:
+            _in = (xs[i], ys[i][j])
+            _out = (xs[i + 1], ys[i + 1][k])
+            pygame.draw.line(ctx.surface, color, _in, _out, width=1)
+
         for i in range(len(xs) - 1):
+            weights = linears[i].weight.detach().cpu().numpy()
             for j in range(len(ys[i])):
                 for k in range(len(ys[i + 1])):
-                    pygame.draw.line(
-                        ctx.surface,
-                        Colors.BEIGE,
-                        (xs[i], ys[i][j]),
-                        (xs[i + 1], ys[i + 1][k]),
-                        width=1,
-                    )
+                    color = Colors.RED if weights[k, j] <= 0.0 else Colors.GREEN
+                    _line(i, j, k, color)
 
         for i, x in enumerate(xs):
             for y in ys[i]:
