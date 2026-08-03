@@ -23,18 +23,18 @@ class SimulationScreen(Screen):
         self._ctx = ctx
 
         self.training = False
-        self._steps_per_simulation = 1500
-        self._epochs = 100
+        self._steps_per_simulation = 3000
+        self._epochs = 25
+        self._eval_step = self._epochs // 5
 
         self._simulation.reset()
 
     def handle_event(self) -> None:
         state = self._simulation.input_state_vector
         logits = self._model(state.to("cuda"))
-        action = Categorical(logits=logits).sample()
-        self._simulation.handle_output_vector(
-            F.one_hot(action, self._simulation.output_dim)
-        )
+        # action = Categorical(logits=logits).sample()
+        action_vector = F.one_hot(logits.argmax(), self._simulation.output_dim)
+        self._simulation.handle_output_vector(action_vector)
 
         self._user_control()
 
@@ -63,8 +63,10 @@ class SimulationScreen(Screen):
         for epoch in range(self._epochs):
             self._simulation.reset()
             self._run_episode(GAMMA, UPDATE_EVERY)
-            if epoch % 50 == 0:
+            if epoch % self._eval_step == 0:
                 print(f"{epoch:>3}/{self._epochs}")
+
+        print(f"{self._epochs:>3}/{self._epochs}")
 
     def _run_episode(self, gamma: float, update_every: int) -> None:
         log_probs, rewards = [], []

@@ -101,11 +101,19 @@ class _NeuralNetworkDrawer:
 
         for i, x in enumerate(xs[:-1]):
             for y in ys[i]:
-                pygame.draw.circle(ctx.surface, Colors.BEIGE, (x, y), radius=4)
+                pygame.draw.circle(ctx.surface, Colors.BEIGE, (x, y), radius=8)
+
+        most_probable = out.argmax(dim=-1)
+        pygame.draw.circle(
+            ctx.surface,
+            Colors.BEIGE,
+            (xs[-1], ys[-1][most_probable]),
+            radius=10,
+        )
 
         for i, y in enumerate(ys[-1]):
             color = Colors.RED if out[i] <= 0 else Colors.GREEN
-            pygame.draw.circle(ctx.surface, color, (xs[-1], y), radius=4)
+            pygame.draw.circle(ctx.surface, color, (xs[-1], y), radius=8)
 
     @cache
     def _xs(self, screen_width: int, offset: int) -> list[int]:

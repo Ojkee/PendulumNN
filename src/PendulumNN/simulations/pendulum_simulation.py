@@ -250,8 +250,11 @@ class PendulumSimulation(Simulation):
         MAX_POINTS = 10.0
         angle_reward = self._angle_reward(MAX_POINTS)
         max_cart_x = (ctx.width // 2) / self._pendulum_scale
-        normalized_cart_x = (self._cart_x / max_cart_x).abs()
-        return angle_reward - normalized_cart_x
+        norm_cart_x = (self._cart_x / max_cart_x).abs()
+        norm_valocities = (
+            self._velocities.pow(torch.tensor(2.0)).sum() / self._num_nodes
+        )
+        return angle_reward - norm_cart_x - norm_valocities
 
     def _angle_reward(self, max_points: float) -> torch.Tensor:
         angle_diff = self._angle_diff(self.state.angles, torch.pi).abs().sum()
